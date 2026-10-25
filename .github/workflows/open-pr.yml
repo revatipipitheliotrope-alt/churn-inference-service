@@ -1,0 +1,74 @@
+name: Open pull request for feature branch
+
+# Opens a tracking issue and a pull request for an already-pushed feature
+# branch, so the change goes through the normal review flow. Run it from the
+# Actions tab with "Run workflow".
+#
+# Requires: Settings > Actions > General > Workflow permissions >
+# "Allow GitHub Actions to create and approve pull requests".
+
+on:
+  workflow_dispatch:
+    inputs:
+      branch:
+        description: "Feature branch to open the pull request for"
+        required: true
+        default: "feature/batch-predict"
+
+permissions:
+  contents: read
+  issues: write
+  pull-requests: write
+
+jobs:
+  open-pr:
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      GH_REPO: ${{ github.repository }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Create tracking issue
+        id: issue
+        run: |
+          url=$(gh issue create \
+            --title "Add a batch prediction endpoint for the nightly churn scoring job" \
+            --body "$(cat <<'EOF'
+          The nightly churn scoring job currently calls `POST /predict` once per customer, which is about 40,000 HTTP calls per run and takes over an hour.
+
+          We need a `POST /predict/batch` endpoint that:
+
+          - accepts a list of customers in one request,
+          - returns exactly one prediction per input row, in the same order, with the `customer_id` echoed back so the job can join the scores onto the customer table,
+          - handles customers in their first billing cycle, who have no `total_charges` value yet in the export.
+
+          Acceptance: the job can score the full customer base in a handful of requests, and no customer is silently skipped or mis-scored.
+          EOF
+          )")
+          echo "number=${url##*/}" >> "$GITHUB_OUTPUT"
+          echo "Created issue $url"
+
+      - name: Open pull request
+        run: |
+          gh pr create \
+            --base main \
+            --head "${{ inputs.branch }}" \
+            --title "Add /predict/batch endpoint for the nightly scoring job" \
+            --body "$(cat <<'EOF'
+          ## Summary
+
+          Adds `POST /predict/batch` so the nightly scoring job can send many customers in one request instead of calling `/predict` once per customer.
+
+          - New `app/batch.py` module with `preprocess_batch` and the batch router, wired into the app in `app/main.py`
+          - `total_charges` is optional in batch rows because customers in their first billing cycle have no total yet
+          - Happy-path test in `tests/test_batch.py`
+          - README documents the new endpoint
+
+          Closes #${{ steps.issue.outputs.number }}
+
+          ## Testing
+
+          Tested locally against the exported production model with a 50-row sample file; all rows came back with scores.
+          EOF
+          )"
