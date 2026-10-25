@@ -8,6 +8,7 @@ The retention team calls it from the nightly scoring job and from the account-ma
 | Path | Purpose |
 | --- | --- |
 | `app/main.py` | FastAPI app, `/health` and `/predict` endpoints, lazy model loading |
+| `app/batch.py` | `/predict/batch` endpoint used by the nightly scoring job |
 | `app/model.py` | `ChurnModel` wrapper, `features_to_frame` preprocessing, risk buckets |
 | `app/schemas.py` | Pydantic request/response models |
 | `app/config.py` | Settings read from environment variables (`CHURN_MODEL_PATH`, thresholds) |
@@ -57,6 +58,28 @@ curl -s -X POST http://127.0.0.1:8000/predict \
 ```
 
 Risk buckets come from `CHURN_MEDIUM_RISK_THRESHOLD` (default 0.4) and `CHURN_HIGH_RISK_THRESHOLD` (default 0.7).
+
+### `POST /predict/batch`
+
+Scores many customers in one call. Used by the nightly scoring job. Rows use the same fields as
+`/predict`; `total_charges` may be omitted for customers in their first billing cycle.
+
+```bash
+curl -s -X POST http://127.0.0.1:8000/predict/batch \
+  -H "Content-Type: application/json" \
+  -d '{"rows": [
+        {"customer_id": "C-1001", "tenure_months": 14, "monthly_charges": 79.5, "total_charges": 1113.0,
+         "num_support_tickets": 2, "contract_type": "month_to_month", "has_tech_support": false},
+        {"customer_id": "C-1002", "tenure_months": 0, "monthly_charges": 55.0,
+         "num_support_tickets": 0, "contract_type": "one_year", "has_tech_support": true}
+      ]}'
+```
+
+```json
+{"predictions": [{"customer_id": "C-1001", "churn_probability": 0.61, "churn_risk": "medium", "model_version": "2026.10.1"}, ...], "count": 2}
+```
+
+The model is loaded from `/opt/ml/models/churn_model.joblib`, the path used by the scoring cluster.
 
 ## Configuration
 

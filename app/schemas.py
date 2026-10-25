@@ -27,3 +27,19 @@ class PredictionResponse(BaseModel):
     churn_probability: float = Field(ge=0, le=1)
     churn_risk: RiskBucket
     model_version: str
+
+
+class BatchCustomerFeatures(CustomerFeatures):
+    """Batch rows come straight from the billing export, where customers in
+    their first billing cycle have no total_charges yet."""
+
+    total_charges: float | None = Field(default=None, ge=0)
+
+
+class BatchPredictionRequest(BaseModel):
+    rows: list[BatchCustomerFeatures]
+
+
+class BatchPredictionResponse(BaseModel):
+    predictions: list[PredictionResponse]
+    count: int
