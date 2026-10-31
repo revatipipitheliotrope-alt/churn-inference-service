@@ -7,6 +7,7 @@ import logging
 from fastapi import Depends, FastAPI, HTTPException
 
 from app import __version__
+from app.batch import router as batch_router
 from app.config import Settings, get_settings
 from app.model import ChurnModel, ModelNotFoundError, features_to_frame, risk_bucket
 from app.schemas import CustomerFeatures, PredictionResponse
@@ -18,6 +19,7 @@ app = FastAPI(
     version=__version__,
     description="Scores customers for churn risk using the retention team's model.",
 )
+app.include_router(batch_router)
 
 _model: ChurnModel | None = None
 
